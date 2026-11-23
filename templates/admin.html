@@ -286,7 +286,6 @@
         <div>
           <h1>问卷管理后台</h1>
           <div class="sub">校园生活与服务问卷调查 · 提交记录</div>
-          <div class="sub" id="currentUserInfo"></div>
         </div>
         <div style="display: flex; gap: 8px;">
           <a class="btn" href="/" target="_blank" style="text-decoration: none;">查看问卷</a>
@@ -338,26 +337,22 @@
         <div class="toolbar">
           <div class="left">
             <button class="btn btn-danger" id="batchDeleteBtn" disabled>删除选中（<span id="selectedCount">0</span>）</button>
-            <button class="btn btn-danger" id="deleteAllBtn">删除全部</button>
             <span class="count" id="totalCount"></span>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn" id="exportXlsxBtn">导出表格</button>
-            <button class="btn" id="exportBtn">导出 CSV</button>
-          </div>
+          <button class="btn" id="exportBtn">导出 CSV</button>
         </div>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th style="width: 36px;" id="thSelect"><input type="checkbox" id="selectAll" /></th>
+                <th style="width: 36px;"><input type="checkbox" id="selectAll" /></th>
                 <th>提交时间</th>
                 <th>性别</th>
                 <th>线上服务需求</th>
                 <th>线上渠道</th>
                 <th>线下服务需求</th>
-                <th style="width: 76px;" id="thActions">操作</th>
+                <th style="width: 76px;">操作</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -373,18 +368,6 @@
           <span class="page-info" id="pageInfo"></span>
           <button class="btn btn-sm" id="nextPageBtn">下一页</button>
         </div>
-      </div>
-
-      <!-- 子管理员（仅主管理员可见） -->
-      <div class="card" id="subadminCard" style="display: none;">
-        <h2 style="font-size: 16px; margin-bottom: 6px;">子管理员</h2>
-        <p class="muted" style="margin-bottom: 12px;">子管理员只能查看、搜索和导出数据，不能删除数据、不能管理子管理员。</p>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
-          <input type="text" id="newSubUsername" class="text-input" placeholder="新子管理员用户名" style="flex: 1 1 160px;" />
-          <input type="text" id="newSubPassword" class="text-input" placeholder="密码（创建后请转告对方）" style="flex: 1 1 160px;" />
-          <button class="btn btn-primary" id="createSubBtn">创建子管理员</button>
-        </div>
-        <div id="subadminList"></div>
       </div>
     </div>
   </div>
@@ -413,8 +396,6 @@
     const toastEl = document.getElementById('toast');
 
     const state = {
-      role: null,
-      username: null,
       page: 1,
       perPage: 20,
       pages: 0,
@@ -485,26 +466,6 @@
       adminView.style.display = 'block';
     }
 
-    // 按角色显示/隐藏界面：子管理员看不到删除按钮和子管理员区域
-    function applyRole() {
-      const isAdmin = state.role === 'admin';
-      document.getElementById('batchDeleteBtn').style.display = isAdmin ? '' : 'none';
-      document.getElementById('deleteAllBtn').style.display = isAdmin ? '' : 'none';
-      document.getElementById('thSelect').style.display = isAdmin ? '' : 'none';
-      document.getElementById('thActions').style.display = isAdmin ? '' : 'none';
-      document.getElementById('subadminCard').style.display = isAdmin ? '' : 'none';
-      document.getElementById('currentUserInfo').textContent = state.username
-        ? `当前账号：${state.username}（${isAdmin ? '主管理员' : '子管理员'}）`
-        : '';
-    }
-
-    async function loadMe() {
-      const data = await api('/api/admin/me');
-      state.username = data.username || null;
-      state.role = data.role || null;
-      applyRole();
-    }
-
     // ---- 登录 ----
     loginForm.addEventListener('submit', async e => {
       e.preventDefault();
@@ -518,10 +479,8 @@
         });
         document.getElementById('usernameInput').value = '';
         passwordInput.value = '';
-        await loadMe();
         showAdmin();
         await refreshAll();
-        await loadUsers();
       } catch (err) {
         loginError.textContent = err.message;
         loginError.style.display = 'block';
@@ -534,8 +493,6 @@
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       try { await api('/api/admin/logout', { method: 'POST' }); } catch (e) { /* 忽略 */ }
       state.selected.clear();
-      state.role = null;
-      state.username = null;
       showLogin();
     });
 
@@ -591,24 +548,22 @@
       }
       emptyTip.style.display = 'none';
 
-      // 电脑端表格（子管理员没有复选框列和删除列）
-      const isAdmin = state.role === 'admin';
-      const colCount = isAdmin ? 7 : 5;
+      // 电脑端表格
       tableBody.innerHTML = state.items.map(item => {
         const expanded = state.expandedId === item.id;
         const checked = state.selected.has(item.id) ? 'checked' : '';
         const row = `
           <tr data-id="${item.id}" class="${expanded ? 'expanded' : ''}">
-            ${isAdmin ? `<td><input type="checkbox" class="row-check" data-id="${item.id}" ${checked} /></td>` : ''}
+            <td><input type="checkbox" class="row-check" data-id="${item.id}" ${checked} /></td>
             <td class="muted" style="white-space: nowrap;">${formatTime(item.created_at)}</td>
             <td><span class="tag">${escapeHtml(item.gender)}</span></td>
             <td><div class="truncate">${escapeHtml(item.onlineDirect)}</div></td>
             <td>${escapeHtml(item.onlineChannel)}</td>
             <td><div class="truncate">${escapeHtml(item.offlineDirect)}</div></td>
-            ${isAdmin ? `<td><button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button></td>` : ''}
+            <td><button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button></td>
           </tr>`;
         const detail = expanded
-          ? `<tr class="detail-row"><td colspan="${colCount}">${detailHtml(item)}</td></tr>`
+          ? `<tr class="detail-row"><td colspan="7">${detailHtml(item)}</td></tr>`
           : '';
         return row + detail;
       }).join('');
@@ -621,7 +576,7 @@
           <div class="submission-card ${expanded ? 'open' : ''}" data-id="${item.id}">
             <div class="card-head">
               <label style="display: flex; align-items: center; gap: 8px;">
-                ${isAdmin ? `<input type="checkbox" class="row-check" data-id="${item.id}" ${checked} />` : ''}
+                <input type="checkbox" class="row-check" data-id="${item.id}" ${checked} />
                 <span class="tag">${escapeHtml(item.gender)}</span>
                 <span class="card-meta">${formatTime(item.created_at)}</span>
               </label>
@@ -633,7 +588,7 @@
             </div>
             <div class="card-actions">
               <button class="btn btn-sm card-toggle" data-id="${item.id}">${expanded ? '收起详情' : '查看详情'}</button>
-              ${isAdmin ? `<button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button>` : ''}
+              <button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button>
             </div>
             <div class="card-detail">${detailHtml(item)}</div>
           </div>`;
@@ -776,25 +731,7 @@
 
     function askDelete(type, ids) {
       state.pendingDelete = { type, ids };
-      const titleEl = document.getElementById('confirmTitle');
-      const textEl = document.getElementById('confirmText');
-      if (type === 'batch') {
-        titleEl.textContent = `确认删除 ${ids.length} 条记录？`;
-        textEl.textContent = '删除后记录将从数据库中移除，无法恢复。';
-      } else if (type === 'all') {
-        titleEl.textContent = '确认删除全部数据？';
-        textEl.textContent = `将删除数据库中全部 ${state.total} 条问卷记录，无法恢复，请确认。`;
-      } else {
-        titleEl.textContent = '确认删除这条记录？';
-        textEl.textContent = '删除后记录将从数据库中移除，无法恢复。';
-      }
-      confirmMask.classList.add('show');
-    }
-
-    function askDeleteUser(id, username) {
-      state.pendingDelete = { type: 'user', userId: id };
-      document.getElementById('confirmTitle').textContent = '确认删除子管理员？';
-      document.getElementById('confirmText').textContent = `将删除子管理员「${username}」，该账号将无法再登录。`;
+      document.getElementById('confirmTitle').textContent = type === 'batch' ? `确认删除 ${ids.length} 条记录？` : '确认删除这条记录？';
       confirmMask.classList.add('show');
     }
 
@@ -818,27 +755,17 @@
         if (pending.type === 'single') {
           await api(`/api/admin/submissions/${pending.ids[0]}`, { method: 'DELETE' });
           state.selected.delete(pending.ids[0]);
-          toast('已删除');
-        } else if (pending.type === 'batch') {
+        } else {
           const data = await api('/api/admin/submissions/delete-batch', {
             method: 'POST',
             body: JSON.stringify({ ids: pending.ids })
           });
           pending.ids.forEach(id => state.selected.delete(id));
           toast(`已删除 ${data.deleted} 条`);
-        } else if (pending.type === 'all') {
-          const data = await api('/api/admin/submissions/delete-all', { method: 'POST' });
-          state.selected.clear();
-          state.page = 1;
-          toast(`已删除全部 ${data.deleted} 条`);
-        } else if (pending.type === 'user') {
-          await api(`/api/admin/users/${pending.userId}`, { method: 'DELETE' });
-          toast('子管理员已删除');
-          await loadUsers();
-          return;
         }
+        if (pending.type === 'single') toast('已删除');
         // 如果当前页删空了，回到上一页
-        if (pending.type !== 'all' && state.items.length <= pending.ids.length && state.page > 1) state.page--;
+        if (state.items.length <= pending.ids.length && state.page > 1) state.page--;
         await refreshAll();
       } catch (err) {
         toast(err.message);
@@ -852,71 +779,13 @@
       askDelete('batch', Array.from(state.selected));
     });
 
-    document.getElementById('deleteAllBtn').addEventListener('click', () => {
-      if (state.total === 0) {
-        toast('已经没有数据了');
-        return;
-      }
-      askDelete('all', []);
-    });
-
-    // ---- 导出（只读，导出不删除数据库内容，随时可以重新导出拿到最新数据） ----
-    function exportParams() {
+    // ---- 导出 ----
+    document.getElementById('exportBtn').addEventListener('click', () => {
       const params = new URLSearchParams();
       if (state.q) params.set('q', state.q);
       if (state.gender) params.set('gender', state.gender);
       if (state.channel) params.set('channel', state.channel);
-      return params.toString();
-    }
-
-    document.getElementById('exportBtn').addEventListener('click', () => {
-      window.location.href = '/api/admin/export.csv?' + exportParams();
-    });
-
-    document.getElementById('exportXlsxBtn').addEventListener('click', () => {
-      window.location.href = '/api/admin/export.xlsx?' + exportParams();
-    });
-
-    // ---- 子管理员（仅主管理员） ----
-    async function loadUsers() {
-      if (state.role !== 'admin') return;
-      const data = await api('/api/admin/users');
-      const list = document.getElementById('subadminList');
-      if (!data.users.length) {
-        list.innerHTML = '<div class="muted">暂无子管理员</div>';
-        return;
-      }
-      list.innerHTML = data.users.map(u => `
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F1F5;">
-          <span>${escapeHtml(u.username)} <span class="muted">创建于 ${formatTime(u.created_at)}</span></span>
-          <button class="btn btn-sm btn-danger sub-delete" data-id="${u.id}" data-username="${escapeHtml(u.username)}">删除</button>
-        </div>`).join('');
-    }
-
-    document.getElementById('createSubBtn').addEventListener('click', async () => {
-      const username = document.getElementById('newSubUsername').value.trim();
-      const password = document.getElementById('newSubPassword').value;
-      if (!username || !password) {
-        toast('用户名和密码都不能为空');
-        return;
-      }
-      try {
-        await api('/api/admin/users', {
-          method: 'POST',
-          body: JSON.stringify({ username, password })
-        });
-        document.getElementById('newSubUsername').value = '';
-        document.getElementById('newSubPassword').value = '';
-        toast('子管理员已创建');
-        await loadUsers();
-      } catch (err) {
-        toast(err.message);
-      }
-    });
-
-    document.getElementById('subadminList').addEventListener('click', e => {
-      const btn = e.target.closest('.sub-delete');
-      if (btn) askDeleteUser(btn.dataset.id, btn.dataset.username);
+      window.location.href = '/api/admin/export.csv?' + params.toString();
     });
 
     // ---- 初始化：先查登录态 ----
@@ -925,12 +794,8 @@
         const res = await fetch('/api/admin/me', { credentials: 'same-origin' });
         const data = await res.json();
         if (data.logged_in) {
-          state.username = data.username || null;
-          state.role = data.role || null;
-          applyRole();
           showAdmin();
           await refreshAll();
-          await loadUsers();
         } else {
           showLogin();
         }
