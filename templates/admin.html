@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>问卷管理后台</title>
+  <style>
+    :root {
+      --bg-page: #F5F7FA;
+      --bg-card: #FFFFFF;
+      --primary: #1677FF;
+      --primary-hover: #0958D9;
+      --primary-light: #E6F4FF;
+      --text-main: #1F2329;
+      --text-sub: #646A73;
+      --text-placeholder: #8F959E;
+      --border-color: #DEE0E3;
+      --danger: #F54A45;
+      --danger-light: #FFF1F0;
+      --radius-card: 10px;
+      --radius-item: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.5;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page-wrapper { max-width: 1080px; margin: 0 auto; min-height: 100vh; padding: 16px 14px 40px; }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius-card);
+      padding: 18px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    /* 顶栏 */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar h1 { font-size: 19px; font-weight: 600; }
+
+    .topbar .sub { font-size: 13px; color: var(--text-sub); margin-top: 2px; }
+
+    /* 按钮 */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid var(--border-color);
+      background: #fff;
+      color: var(--text-main);
+      border-radius: var(--radius-item);
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .btn:active { opacity: 0.85; }
+
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:active { background: var(--primary-hover); }
+
+    .btn-danger { color: var(--danger); border-color: #FFB3B0; }
+    .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-sm { padding: 5px 10px; font-size: 13px; }
+
+    .btn-block { width: 100%; height: 44px; font-size: 16px; }
+
+    /* 登录 */
+    .login-wrap { max-width: 380px; margin: 80px auto 0; }
+    .login-wrap h1 { font-size: 20px; text-align: center; margin-bottom: 6px; }
+    .login-wrap .desc { font-size: 13.5px; color: var(--text-sub); text-align: center; margin-bottom: 18px; }
+
+    .text-input, select.text-input {
+      width: 100%;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-item);
+      padding: 10px 12px;
+      font-size: 14px;
+      color: var(--text-main);
+      background: #fff;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .text-input:focus { border-color: var(--primary); }
+    .text-input::placeholder { color: var(--text-placeholder); }
+
+    .error-tip { color: var(--danger); font-size: 13px; margin-top: 8px; text-align: center; display: none; }
+
+    /* 统计卡片 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat-card { padding: 16px; text-align: center; }
+    .stat-num { font-size: 28px; font-weight: 600; color: var(--primary); line-height: 1.2; }
+    .stat-label { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+
+    .stat-breakdown { font-size: 12.5px; color: var(--text-sub); margin-top: 8px; line-height: 1.7; }
+
+    /* 筛选栏 */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-bar .search-input { flex: 1 1 200px; }
+    .filter-bar select { flex: 0 1 150px; }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .toolbar .left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .toolbar .count { font-size: 13px; color: var(--text-sub); }
+
+    /* 电脑端表格 */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #F0F1F5; vertical-align: top; }
+    th { font-size: 13px; color: var(--text-sub); font-weight: 500; white-space: nowrap; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #FAFBFC; }
+    tbody tr.expanded { background: var(--primary-light); }
+
+    .detail-row td { background: #FAFBFC; cursor: default; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; font-size: 13.5px; }
+    .detail-grid .full { grid-column: 1 / -1; }
+    .detail-q { color: var(--text-sub); font-size: 12.5px; margin-bottom: 2px; }
+    .detail-a { word-break: break-all; }
+
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 1px 7px;
+      border-radius: 4px;
+    }
+
+    .truncate { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .muted { color: var(--text-sub); font-size: 13px; }
+
+    /* 手机端卡片 */
+    .card-list { display: none; flex-direction: column; gap: 10px; }
+    .submission-card {
+      border: 1px solid #F0F1F5;
+      border-radius: var(--radius-item);
+      padding: 12px;
+    }
+
+    .submission-card .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .submission-card .card-meta { font-size: 12.5px; color: var(--text-sub); }
+    .submission-card .card-preview { font-size: 13.5px; color: var(--text-main); margin-bottom: 8px; line-height: 1.6; }
+    .submission-card .card-actions { display: flex; gap: 8px; }
+    .submission-card .card-detail { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #EBEEF5; }
+    .submission-card.open .card-detail { display: block; }
+    .submission-card .detail-item { margin-bottom: 10px; font-size: 13.5px; }
+    .submission-card .detail-item:last-child { margin-bottom: 0; }
+
+    .empty { text-align: center; color: var(--text-sub); padding: 32px 0; font-size: 14px; }
+
+    /* 分页 */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    .pagination .page-info { color: var(--text-sub); font-size: 13px; }
+
+    /* 确认弹窗 */
+    .modal-mask {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+
+    .modal-mask.show { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: var(--radius-card);
+      padding: 20px 18px;
+      max-width: 360px;
+      width: 100%;
+    }
+
+    .modal h3 { font-size: 16px; margin-bottom: 8px; }
+    .modal p { font-size: 14px; color: var(--text-sub); margin-bottom: 16px; }
+    .modal .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 32px;
+      transform: translateX(-50%);
+      background: rgba(31, 35, 41, 0.92);
+      color: #fff;
+      font-size: 14px;
+      padding: 10px 18px;
+      border-radius: 99px;
+      display: none;
+      z-index: 200;
+      max-width: calc(100vw - 32px);
+      text-align: center;
+    }
+
+    .toast.show { display: block; }
+
+    /* 响应式：窄屏用卡片列表，隐藏表格 */
+    @media (max-width: 720px) {
+      .table-wrap { display: none; }
+      .card-list { display: flex; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .filter-bar select { flex: 1 1 120px; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <!-- 登录视图 -->
+    <div id="loginView" style="display: none;">
+      <div class="login-wrap">
+        <div class="card">
+          <h1>问卷管理后台</h1>
+          <p class="desc">请输入管理员账号</p>
+          <form id="loginForm">
+            <input type="text" id="usernameInput" class="text-input" placeholder="用户名" autocomplete="username" />
+            <input type="password" id="passwordInput" class="text-input" placeholder="管理员密码" autocomplete="current-password" />
+            <p class="error-tip" id="loginError">用户名或密码不正确</p>
+            <div style="margin-top: 14px;">
+              <button type="submit" class="btn btn-primary btn-block" id="loginBtn">登录</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 管理视图 -->
+    <div id="adminView" style="display: none;">
+      <div class="card topbar">
+        <div>
+          <h1>问卷管理后台</h1>
+          <div class="sub">校园生活与服务问卷调查 · 提交记录</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <a class="btn" href="/" target="_blank" style="text-decoration: none;">查看问卷</a>
+          <button class="btn" id="logoutBtn">退出登录</button>
+        </div>
+      </div>
+
+      <!-- 统计 -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="card stat-card">
+          <div class="stat-num" id="statTotal">–</div>
+          <div class="stat-label">提交总数</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-num" id="statGenderTop">–</div>
+          <div class="stat-label">性别分布</div>
+          <div class="stat-breakdown" id="statGenderDetail"></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-num" id="statChannelTop">–</div>
+          <div class="stat-label">线上渠道分布</div>
+          <div class="stat-breakdown" id="statChannelDetail"></div>
+        </div>
+      </div>
+
+      <!-- 筛选 -->
+      <div class="card">
+        <div class="filter-bar">
+          <input type="text" id="searchInput" class="text-input search-input" placeholder="搜索答案关键词…" />
+          <select id="genderFilter" class="text-input">
+            <option value="">全部性别</option>
+            <option value="男生">男生</option>
+            <option value="女生">女生</option>
+          </select>
+          <select id="channelFilter" class="text-input">
+            <option value="">全部渠道</option>
+            <option value="微信小程序">微信小程序</option>
+            <option value="微信群 / QQ群">微信群 / QQ群</option>
+            <option value="微信公众号 / 朋友圈">微信公众号 / 朋友圈</option>
+            <option value="手机网页端">手机网页端</option>
+          </select>
+          <button class="btn btn-primary" id="searchBtn">搜索</button>
+          <button class="btn" id="resetFilterBtn">重置</button>
+        </div>
+      </div>
+
+      <!-- 列表 -->
+      <div class="card">
+        <div class="toolbar">
+          <div class="left">
+            <button class="btn btn-danger" id="batchDeleteBtn" disabled>删除选中（<span id="selectedCount">0</span>）</button>
+            <span class="count" id="totalCount"></span>
+          </div>
+          <button class="btn" id="exportBtn">导出 CSV</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 36px;"><input type="checkbox" id="selectAll" /></th>
+                <th>提交时间</th>
+                <th>性别</th>
+                <th>线上服务需求</th>
+                <th>线上渠道</th>
+                <th>线下服务需求</th>
+                <th style="width: 76px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-list" id="cardList"></div>
+
+        <div class="empty" id="emptyTip" style="display: none;">暂无提交记录</div>
+
+        <div class="pagination" id="pagination" style="display: none;">
+          <button class="btn btn-sm" id="prevPageBtn">上一页</button>
+          <span class="page-info" id="pageInfo"></span>
+          <button class="btn btn-sm" id="nextPageBtn">下一页</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 删除确认弹窗 -->
+  <div class="modal-mask" id="confirmMask">
+    <div class="modal">
+      <h3 id="confirmTitle">确认删除？</h3>
+      <p id="confirmText">删除后记录将从数据库中移除，无法恢复。</p>
+      <div class="actions">
+        <button class="btn" id="confirmCancelBtn">取消</button>
+        <button class="btn btn-danger" id="confirmOkBtn">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const loginView = document.getElementById('loginView');
+    const adminView = document.getElementById('adminView');
+    const loginForm = document.getElementById('loginForm');
+    const passwordInput = document.getElementById('passwordInput');
+    const loginError = document.getElementById('loginError');
+    const loginBtn = document.getElementById('loginBtn');
+    const toastEl = document.getElementById('toast');
+
+    const state = {
+      page: 1,
+      perPage: 20,
+      pages: 0,
+      total: 0,
+      q: '',
+      gender: '',
+      channel: '',
+      items: [],
+      selected: new Set(),
+      expandedId: null,
+      pendingDelete: null // {type: 'single'|'batch', ids: []}
+    };
+
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      setTimeout(() => toastEl.classList.remove('show'), 2500);
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatTime(iso) {
+      // 后端存的是 UTC 时间戳，展示时转为本地时间
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+
+    function formatMulti(list, other) {
+      const items = (list || []).map(v => {
+        if (v === '其他' && other) return `其他（${other}）`;
+        return v;
+      });
+      return items.join('、');
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      if (res.status === 401) {
+        showLogin();
+        throw new Error('登录已过期，请重新登录');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || '请求失败');
+      }
+      return data;
+    }
+
+    function showLogin() {
+      adminView.style.display = 'none';
+      loginView.style.display = 'block';
+    }
+
+    function showAdmin() {
+      loginView.style.display = 'none';
+      adminView.style.display = 'block';
+    }
+
+    // ---- 登录 ----
+    loginForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      loginError.style.display = 'none';
+      loginBtn.disabled = true;
+      loginBtn.textContent = '登录中…';
+      try {
+        await api('/api/admin/login', {
+          method: 'POST',
+          body: JSON.stringify({ username: document.getElementById('usernameInput').value, password: passwordInput.value })
+        });
+        document.getElementById('usernameInput').value = '';
+        passwordInput.value = '';
+        showAdmin();
+        await refreshAll();
+      } catch (err) {
+        loginError.textContent = err.message;
+        loginError.style.display = 'block';
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = '登录';
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try { await api('/api/admin/logout', { method: 'POST' }); } catch (e) { /* 忽略 */ }
+      state.selected.clear();
+      showLogin();
+    });
+
+    // ---- 统计 ----
+    async function loadStats() {
+      const data = await api('/api/admin/stats');
+      document.getElementById('statTotal').textContent = data.total;
+      const gender = data.gender || {};
+      const channel = data.channel || {};
+      const genderEntries = Object.entries(gender).sort((a, b) => b[1] - a[1]);
+      const channelEntries = Object.entries(channel).sort((a, b) => b[1] - a[1]);
+      document.getElementById('statGenderTop').textContent =
+        genderEntries.length ? `${genderEntries[0][0]} ${genderEntries[0][1]}` : '–';
+      document.getElementById('statGenderDetail').innerHTML =
+        genderEntries.map(([k, v]) => `${escapeHtml(k)}：${v}`).join('<br>');
+      document.getElementById('statChannelTop').textContent =
+        channelEntries.length ? `${channelEntries[0][0]} ${channelEntries[0][1]}` : '–';
+      document.getElementById('statChannelDetail').innerHTML =
+        channelEntries.map(([k, v]) => `${escapeHtml(k)}：${v}`).join('<br>');
+    }
+
+    // ---- 列表 ----
+    function detailHtml(item) {
+      return `
+        <div class="detail-grid">
+          <div><div class="detail-q">1. 性别</div><div class="detail-a">${escapeHtml(item.gender)}</div></div>
+          <div><div class="detail-q">4. 线上使用方式</div><div class="detail-a">${escapeHtml(item.onlineChannel)}</div></div>
+          <div class="full"><div class="detail-q">2. 希望的线上服务</div><div class="detail-a">${escapeHtml(item.onlineDirect)}</div></div>
+          <div class="full"><div class="detail-q">3. 需要的线上服务选项</div><div class="detail-a">${escapeHtml(formatMulti(item.onlineNeeds, item.onlineNeedsOther))}</div></div>
+          <div class="full"><div class="detail-q">5. 希望的线下服务</div><div class="detail-a">${escapeHtml(item.offlineDirect)}</div></div>
+          <div class="full"><div class="detail-q">6. 需要的线下服务选项</div><div class="detail-a">${escapeHtml(formatMulti(item.offlineNeeds, item.offlineNeedsOther))}</div></div>
+          <div class="full muted">提交时间（UTC）：${escapeHtml(item.created_at)} · IP：${escapeHtml(item.ip || '—')}</div>
+        </div>`;
+    }
+
+    function renderList() {
+      const tableBody = document.getElementById('tableBody');
+      const cardList = document.getElementById('cardList');
+      const emptyTip = document.getElementById('emptyTip');
+      const pagination = document.getElementById('pagination');
+      const totalCount = document.getElementById('totalCount');
+
+      totalCount.textContent = `共 ${state.total} 条`;
+      document.getElementById('selectedCount').textContent = state.selected.size;
+      document.getElementById('batchDeleteBtn').disabled = state.selected.size === 0;
+
+      if (state.items.length === 0) {
+        tableBody.innerHTML = '';
+        cardList.innerHTML = '';
+        emptyTip.style.display = 'block';
+        pagination.style.display = 'none';
+        return;
+      }
+      emptyTip.style.display = 'none';
+
+      // 电脑端表格
+      tableBody.innerHTML = state.items.map(item => {
+        const expanded = state.expandedId === item.id;
+        const checked = state.selected.has(item.id) ? 'checked' : '';
+        const row = `
+          <tr data-id="${item.id}" class="${expanded ? 'expanded' : ''}">
+            <td><input type="checkbox" class="row-check" data-id="${item.id}" ${checked} /></td>
+            <td class="muted" style="white-space: nowrap;">${formatTime(item.created_at)}</td>
+            <td><span class="tag">${escapeHtml(item.gender)}</span></td>
+            <td><div class="truncate">${escapeHtml(item.onlineDirect)}</div></td>
+            <td>${escapeHtml(item.onlineChannel)}</td>
+            <td><div class="truncate">${escapeHtml(item.offlineDirect)}</div></td>
+            <td><button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button></td>
+          </tr>`;
+        const detail = expanded
+          ? `<tr class="detail-row"><td colspan="7">${detailHtml(item)}</td></tr>`
+          : '';
+        return row + detail;
+      }).join('');
+
+      // 手机端卡片
+      cardList.innerHTML = state.items.map(item => {
+        const expanded = state.expandedId === item.id;
+        const checked = state.selected.has(item.id) ? 'checked' : '';
+        return `
+          <div class="submission-card ${expanded ? 'open' : ''}" data-id="${item.id}">
+            <div class="card-head">
+              <label style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" class="row-check" data-id="${item.id}" ${checked} />
+                <span class="tag">${escapeHtml(item.gender)}</span>
+                <span class="card-meta">${formatTime(item.created_at)}</span>
+              </label>
+              <span class="card-meta">${escapeHtml(item.onlineChannel)}</span>
+            </div>
+            <div class="card-preview">
+              <div>线上：${escapeHtml(item.onlineDirect)}</div>
+              <div>线下：${escapeHtml(item.offlineDirect)}</div>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-sm card-toggle" data-id="${item.id}">${expanded ? '收起详情' : '查看详情'}</button>
+              <button class="btn btn-sm btn-danger row-delete" data-id="${item.id}">删除</button>
+            </div>
+            <div class="card-detail">${detailHtml(item)}</div>
+          </div>`;
+      }).join('');
+
+      // 分页
+      if (state.pages > 1) {
+        pagination.style.display = 'flex';
+        document.getElementById('pageInfo').textContent = `第 ${state.page} / ${state.pages} 页`;
+        document.getElementById('prevPageBtn').disabled = state.page <= 1;
+        document.getElementById('nextPageBtn').disabled = state.page >= state.pages;
+      } else {
+        pagination.style.display = 'none';
+      }
+
+      // 全选框状态
+      const selectAll = document.getElementById('selectAll');
+      selectAll.checked = state.items.length > 0 && state.items.every(i => state.selected.has(i.id));
+    }
+
+    async function loadList() {
+      const params = new URLSearchParams({
+        page: state.page,
+        per_page: state.perPage
+      });
+      if (state.q) params.set('q', state.q);
+      if (state.gender) params.set('gender', state.gender);
+      if (state.channel) params.set('channel', state.channel);
+      const data = await api('/api/admin/submissions?' + params.toString());
+      state.total = data.total;
+      state.pages = data.pages;
+      state.items = data.items;
+      // 翻页后清除本页之外的展开状态
+      if (!state.items.some(i => i.id === state.expandedId)) state.expandedId = null;
+      renderList();
+    }
+
+    async function refreshAll() {
+      await loadStats();
+      await loadList();
+    }
+
+    // 列表事件委托
+    document.getElementById('tableBody').addEventListener('click', e => {
+      const delBtn = e.target.closest('.row-delete');
+      if (delBtn) {
+        e.stopPropagation();
+        askDelete('single', [delBtn.dataset.id]);
+        return;
+      }
+      const check = e.target.closest('.row-check');
+      if (check) {
+        e.stopPropagation();
+        toggleSelect(check.dataset.id, check.checked);
+        return;
+      }
+      const row = e.target.closest('tr[data-id]');
+      if (row) {
+        state.expandedId = state.expandedId === row.dataset.id ? null : row.dataset.id;
+        renderList();
+      }
+    });
+
+    document.getElementById('cardList').addEventListener('click', e => {
+      const delBtn = e.target.closest('.row-delete');
+      if (delBtn) {
+        askDelete('single', [delBtn.dataset.id]);
+        return;
+      }
+      const check = e.target.closest('.row-check');
+      if (check) {
+        toggleSelect(check.dataset.id, check.checked);
+        return;
+      }
+      const toggle = e.target.closest('.card-toggle');
+      if (toggle) {
+        state.expandedId = state.expandedId === toggle.dataset.id ? null : toggle.dataset.id;
+        renderList();
+      }
+    });
+
+    document.getElementById('selectAll').addEventListener('change', e => {
+      const checked = e.target.checked;
+      state.items.forEach(item => {
+        if (checked) state.selected.add(item.id);
+        else state.selected.delete(item.id);
+      });
+      renderList();
+    });
+
+    function toggleSelect(id, checked) {
+      if (checked) state.selected.add(id);
+      else state.selected.delete(id);
+      renderList();
+    }
+
+    // ---- 筛选 ----
+    document.getElementById('searchBtn').addEventListener('click', () => {
+      state.q = document.getElementById('searchInput').value.trim();
+      state.gender = document.getElementById('genderFilter').value;
+      state.channel = document.getElementById('channelFilter').value;
+      state.page = 1;
+      state.selected.clear();
+      loadList().catch(err => toast(err.message));
+    });
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('searchBtn').click();
+    });
+
+    document.getElementById('resetFilterBtn').addEventListener('click', () => {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('genderFilter').value = '';
+      document.getElementById('channelFilter').value = '';
+      state.q = '';
+      state.gender = '';
+      state.channel = '';
+      state.page = 1;
+      state.selected.clear();
+      loadList().catch(err => toast(err.message));
+    });
+
+    // ---- 分页 ----
+    document.getElementById('prevPageBtn').addEventListener('click', () => {
+      if (state.page > 1) {
+        state.page--;
+        loadList().catch(err => toast(err.message));
+      }
+    });
+
+    document.getElementById('nextPageBtn').addEventListener('click', () => {
+      if (state.page < state.pages) {
+        state.page++;
+        loadList().catch(err => toast(err.message));
+      }
+    });
+
+    // ---- 删除 ----
+    const confirmMask = document.getElementById('confirmMask');
+
+    function askDelete(type, ids) {
+      state.pendingDelete = { type, ids };
+      document.getElementById('confirmTitle').textContent = type === 'batch' ? `确认删除 ${ids.length} 条记录？` : '确认删除这条记录？';
+      confirmMask.classList.add('show');
+    }
+
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+      state.pendingDelete = null;
+      confirmMask.classList.remove('show');
+    });
+
+    confirmMask.addEventListener('click', e => {
+      if (e.target === confirmMask) {
+        state.pendingDelete = null;
+        confirmMask.classList.remove('show');
+      }
+    });
+
+    document.getElementById('confirmOkBtn').addEventListener('click', async () => {
+      const pending = state.pendingDelete;
+      if (!pending) return;
+      confirmMask.classList.remove('show');
+      try {
+        if (pending.type === 'single') {
+          await api(`/api/admin/submissions/${pending.ids[0]}`, { method: 'DELETE' });
+          state.selected.delete(pending.ids[0]);
+        } else {
+          const data = await api('/api/admin/submissions/delete-batch', {
+            method: 'POST',
+            body: JSON.stringify({ ids: pending.ids })
+          });
+          pending.ids.forEach(id => state.selected.delete(id));
+          toast(`已删除 ${data.deleted} 条`);
+        }
+        if (pending.type === 'single') toast('已删除');
+        // 如果当前页删空了，回到上一页
+        if (state.items.length <= pending.ids.length && state.page > 1) state.page--;
+        await refreshAll();
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        state.pendingDelete = null;
+      }
+    });
+
+    document.getElementById('batchDeleteBtn').addEventListener('click', () => {
+      if (state.selected.size === 0) return;
+      askDelete('batch', Array.from(state.selected));
+    });
+
+    // ---- 导出 ----
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const params = new URLSearchParams();
+      if (state.q) params.set('q', state.q);
+      if (state.gender) params.set('gender', state.gender);
+      if (state.channel) params.set('channel', state.channel);
+      window.location.href = '/api/admin/export.csv?' + params.toString();
+    });
+
+    // ---- 初始化：先查登录态 ----
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/me', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data.logged_in) {
+          showAdmin();
+          await refreshAll();
+        } else {
+          showLogin();
+        }
+      } catch (e) {
+        showLogin();
+      }
+    })();
+  </script>
+</body>
+</html>
