@@ -19,9 +19,11 @@
 - 环境变量 HF_BACKUP_REPO / HF_TOKEN 未配置时，只用本地 SQLite 并打警告日志。
 
 管理员：
-- 密码取环境变量 ADMIN_PASSWORD；未配置时默认 admin123（仅供本地测试，
-  生产环境必须配置）。
-- 登录后用 Flask 签名 session cookie 保持登录态。
+- 主管理员：用户名/密码取环境变量 ADMIN_USER / ADMIN_PASSWORD；
+  未配置时默认 admin / admin123（仅供本地测试，生产环境必须配置）。
+- 子管理员：主管理员在后台创建，账号存在 admin_users 表（密码哈希存储）。
+  子管理员只能查看、搜索、导出，不能删除数据、不能管理子管理员。
+- 登录后用 Flask 签名 session cookie 保持登录态，session 里存用户名和角色。
 """
 
 import csv
@@ -47,6 +49,7 @@ from flask import (
     session,
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -153,6 +156,12 @@ CREATE TABLE IF NOT EXISTS submissions (
     offline_needs_other TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions (created_at DESC);
+CREATE TABLE IF NOT EXISTS admin_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -431,8 +440,16 @@ def submit():
 # ---------------------------------------------------------------------------
 
 def require_admin():
+    """已登录即可（主管理员和子管理员都算）。"""
     if not session.get("admin"):
         abort(401)
+
+
+def require_main_admin():
+    """仅主管理员（环境变量账号）可用；子管理员调用返回 403。"""
+    require_admin()
+    if session.get("role") != "admin":
+        abort(403)
 
 
 @app.route("/api/admin/login", methods=["POST"])
@@ -440,24 +457,48 @@ def admin_login():
     data = request.get_json(silent=True) or {}
     username = data.get("username", "")
     password = data.get("password", "")
-    if (isinstance(username, str) and isinstance(password, str)
-            and secrets.compare_digest(username, ADMIN_USER)
+    if not (isinstance(username, str) and isinstance(password, str)):
+        return jsonify({"ok": False, "error": "用户名或密码不正确"}), 401
+    # 1. 主管理员：环境变量账号
+    if (secrets.compare_digest(username, ADMIN_USER)
             and secrets.compare_digest(password, ADMIN_PASSWORD)):
         session["admin"] = True
+        session["username"] = ADMIN_USER
+        session["role"] = "admin"
         session.permanent = True
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "username": ADMIN_USER, "role": "admin"})
+    # 2. 子管理员：查 admin_users 表（密码是哈希）
+    db = get_db()
+    row = db.execute(
+        "SELECT username, password_hash FROM admin_users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    if row is not None and check_password_hash(row["password_hash"], password):
+        session["admin"] = True
+        session["username"] = row["username"]
+        session["role"] = "subadmin"
+        session.permanent = True
+        return jsonify({"ok": True, "username": row["username"], "role": "subadmin"})
     return jsonify({"ok": False, "error": "用户名或密码不正确"}), 401
 
 
 @app.route("/api/admin/logout", methods=["POST"])
 def admin_logout():
     session.pop("admin", None)
+    session.pop("username", None)
+    session.pop("role", None)
     return jsonify({"ok": True})
 
 
 @app.route("/api/admin/me", methods=["GET"])
 def admin_me():
-    return jsonify({"logged_in": bool(session.get("admin"))})
+    return jsonify(
+        {
+            "logged_in": bool(session.get("admin")),
+            "username": session.get("username"),
+            "role": session.get("role"),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +579,7 @@ def admin_detail(sid):
 
 @app.route("/api/admin/submissions/<sid>", methods=["DELETE"])
 def admin_delete(sid):
-    require_admin()
+    require_main_admin()
     with db_write_lock:
         conn = sqlite3.connect(DB_PATH)
         try:
@@ -556,7 +597,7 @@ def admin_delete(sid):
 
 @app.route("/api/admin/submissions/delete-batch", methods=["POST"])
 def admin_delete_batch():
-    require_admin()
+    require_main_admin()
     data = request.get_json(silent=True) or {}
     ids = data.get("ids")
     if not isinstance(ids, list) or not ids:
@@ -571,6 +612,23 @@ def admin_delete_batch():
             cur = conn.execute(
                 f"DELETE FROM submissions WHERE id IN ({placeholders})", ids
             )
+            conn.commit()
+            deleted = cur.rowcount
+        finally:
+            conn.close()
+        if deleted:
+            backup_upload()
+    return jsonify({"ok": True, "deleted": deleted})
+
+
+@app.route("/api/admin/submissions/delete-all", methods=["POST"])
+def admin_delete_all():
+    """删除全部问卷数据（仅主管理员）。返回删除的条数。"""
+    require_main_admin()
+    with db_write_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            cur = conn.execute("DELETE FROM submissions")
             conn.commit()
             deleted = cur.rowcount
         finally:
@@ -634,6 +692,66 @@ def admin_export_csv():
     )
 
 
+XLSX_HEADERS = [
+    "序号", "性别", "线上直接需求", "线上需要的服务", "线上其他补充",
+    "线上渠道", "线下直接需求", "线下需要的服务", "线下其他补充",
+    "提交时间", "IP地址",
+]
+# 每列宽度（字符数），与 XLSX_HEADERS 一一对应
+XLSX_WIDTHS = [6, 8, 40, 40, 20, 18, 40, 40, 20, 20, 16]
+
+
+@app.route("/api/admin/export.xlsx", methods=["GET"])
+def admin_export_xlsx():
+    """导出 Excel 表格（主管理员和子管理员都可用）。
+    只读操作：导出不删除数据库里的任何内容，随时可以重新导出拿到最新数据。
+    """
+    require_admin()
+    where, params = _build_filters()
+    db = get_db()
+    rows = db.execute(
+        f"SELECT * FROM submissions {where} ORDER BY created_at DESC, id DESC",
+        params,
+    ).fetchall()
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "问卷数据"
+    ws.append(XLSX_HEADERS)
+    for i, row in enumerate(rows, start=1):
+        d = row_to_dict(row)
+        ws.append(
+            [
+                i,
+                d["gender"],
+                d["onlineDirect"],
+                "、".join(d["onlineNeeds"]),
+                d["onlineNeedsOther"],
+                d["onlineChannel"],
+                d["offlineDirect"],
+                "、".join(d["offlineNeeds"]),
+                d["offlineNeedsOther"],
+                d["created_at"],
+                d["ip"],
+            ]
+        )
+    for col_idx, width in enumerate(XLSX_WIDTHS, start=1):
+        ws.column_dimensions[chr(ord("A") + col_idx - 1)].width = width
+    ws.freeze_panes = "A2"  # 冻结首行，方便看大表
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = "survey-export-%s.xlsx" % datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return app.response_class(
+        buf.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.route("/api/admin/stats", methods=["GET"])
 def admin_stats():
     require_admin()
@@ -656,6 +774,76 @@ def admin_stats():
 
 
 # ---------------------------------------------------------------------------
+# 子管理员管理（仅主管理员）
+# ---------------------------------------------------------------------------
+
+@app.route("/api/admin/users", methods=["GET"])
+def admin_list_users():
+    """列出子管理员（不返回密码哈希）。主管理员是环境变量账号，不在这个表里。"""
+    require_main_admin()
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, username, created_at FROM admin_users ORDER BY id ASC"
+    ).fetchall()
+    return jsonify({"ok": True, "users": [dict(r) for r in rows]})
+
+
+@app.route("/api/admin/users", methods=["POST"])
+def admin_create_user():
+    require_main_admin()
+    data = request.get_json(silent=True) or {}
+    username = data.get("username", "")
+    password = data.get("password", "")
+    if not (isinstance(username, str) and username.strip()):
+        return jsonify({"ok": False, "error": "用户名不能为空"}), 400
+    if not (isinstance(password, str) and password):
+        return jsonify({"ok": False, "error": "密码不能为空"}), 400
+    username = username.strip()
+    if secrets.compare_digest(username, ADMIN_USER):
+        return jsonify({"ok": False, "error": "该用户名已被主管理员使用"}), 400
+    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with db_write_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            cur = conn.execute(
+                "INSERT INTO admin_users (username, password_hash, created_at)"
+                " VALUES (?, ?, ?)",
+                (username, generate_password_hash(password), created_at),
+            )
+            conn.commit()
+            user_id = cur.lastrowid
+        except sqlite3.IntegrityError:
+            return jsonify({"ok": False, "error": "用户名已存在"}), 400
+        finally:
+            conn.close()
+        backup_upload()
+    return jsonify(
+        {
+            "ok": True,
+            "user": {"id": user_id, "username": username, "created_at": created_at},
+        }
+    )
+
+
+@app.route("/api/admin/users/<int:uid>", methods=["DELETE"])
+def admin_delete_user(uid):
+    require_main_admin()
+    with db_write_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            cur = conn.execute("DELETE FROM admin_users WHERE id = ?", (uid,))
+            conn.commit()
+            deleted = cur.rowcount
+        finally:
+            conn.close()
+        if deleted:
+            backup_upload()
+    if not deleted:
+        return jsonify({"ok": False, "error": "子管理员不存在"}), 404
+    return jsonify({"ok": True, "deleted": 1})
+
+
+# ---------------------------------------------------------------------------
 # 错误处理（统一返回 JSON）
 # ---------------------------------------------------------------------------
 
@@ -667,6 +855,11 @@ def handle_400(error):
 @app.errorhandler(401)
 def handle_401(error):
     return jsonify({"ok": False, "error": "未登录或登录已过期"}), 401
+
+
+@app.errorhandler(403)
+def handle_403(error):
+    return jsonify({"ok": False, "error": "没有权限，需要主管理员账号"}), 403
 
 
 @app.errorhandler(404)

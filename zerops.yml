@@ -1,0 +1,13 @@
+zerops:
+  - setup: survey
+    build:
+      base: python@3.12
+      buildCommands:
+        - python -m venv venv
+        - venv/bin/pip install -r requirements.txt
+    run:
+      base: python@3.12
+      ports:
+        - port: 7860
+          httpSupport: true
+      start: venv/bin/gunicorn app:app --bind 0.0.0.0:7860 --workers 1 --threads 4
